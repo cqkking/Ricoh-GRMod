@@ -55,7 +55,7 @@ export interface State {
   slots: Record<SlotId, SlotState>;
   wall: WallItem[];
   ratios: RatioItem[]; activeRatio?: string; ratioBackdrop: RatioBackdrop;
-  soft: boolean; dateStamp: boolean; monoUnlock: boolean;
+  soft: boolean; dateStamp: boolean; monoUnlock: boolean; video4k: boolean;
   previewMode: PreviewMode; photoRev: number; cardWall?: CardWall; activeSlot: SlotKey;
   /** Added Image Control slots, in the camera's order (none by default). */
   extras: ExtraSlot[];
@@ -73,7 +73,7 @@ const SLOT_IDS: SlotId[] = ['CY', 'CG'];
 const emptySlot = (): SlotState => ({ names: {}, icon: { mode: 'keep', text: '', style: 'film' } });
 let state: State = {
   ready: false, page: 'ic', fwBusy: false, model: 'HDF', lang: 'zh-CN',
-  slots: { CY: emptySlot(), CG: emptySlot() }, extras: [], wall: [], ratios: [], ratioBackdrop: 'photo', soft: false, dateStamp: false, monoUnlock: false, previewMode: 'photo', photoRev: 0, activeSlot: 'CY', volumes: [], entryOnCard: false, bridgeOpen: false,
+  slots: { CY: emptySlot(), CG: emptySlot() }, extras: [], wall: [], ratios: [], ratioBackdrop: 'photo', soft: false, dateStamp: false, monoUnlock: false, video4k: false, previewMode: 'photo', photoRev: 0, activeSlot: 'CY', volumes: [], entryOnCard: false, bridgeOpen: false,
   copySource: 'card', parked: [], backups: [], copySel: [], copyInfo: {}, builds: [], showAll: false, toasts: [], onlineOpen: false, toursSeen: [],
 };
 const listeners = new Set<() => void>();
@@ -139,7 +139,7 @@ async function saveProject(): Promise<void> {
     extras: s.extras.map((x) => ({ key: x.key, name: x.name, preset: x.preset ? { fileName: x.preset.fileName, kind: x.preset.kind } : null, icon: { mode: x.icon.mode, text: x.icon.text, style: x.icon.style, image: x.icon.image }, ...(x.halation ? { halation: x.halation } : {}) })),
     wall: s.wall.map((w) => ({ id: w.id, name: w.name, kind: w.kind, width: w.width, height: w.height, crop: w.crop })),
     ratios: s.ratios.map((r) => ({ id: r.id, ratio: r.ratio, name: r.name })),
-    soft: s.soft, dateStamp: s.dateStamp, monoUnlock: s.monoUnlock,
+    soft: s.soft, dateStamp: s.dateStamp, monoUnlock: s.monoUnlock, video4k: s.video4k,
     tours: s.toursSeen,
   };
   try { await host.storeSet('project.json', JSON.stringify(doc)); } catch (e) { console.warn('save failed', e); }
@@ -170,7 +170,7 @@ export async function init(): Promise<void> {
         .map((r: RatioItem) => ({ id: r.id, ratio: r.ratio.slice(0, 24), name: String(r.name || '').slice(0, 80) }));
       set({ ratios, activeRatio: ratios[0]?.id, page: doc.page === 'wall' || doc.page === 'copies' || doc.page === 'ratio' || doc.page === 'ic' ? doc.page : doc.page === 'script' ? 'wall' : 'ic', model: doc.model || 'HDF', lang: (LANGS as readonly string[]).includes(doc.lang) ? doc.lang : 'zh-CN', fwName: doc.fwName, showAll: !!doc.showAll, slots, extras, previewMode: doc.previewMode === 'swatch' ? 'swatch' : 'photo', ratioBackdrop: doc.ratioBackdrop === 'gray' ? 'gray' : 'photo', cardWall: validCardWall(doc.cardWall),
         soft: doc.soft === true || (!!doc.softFocus && typeof doc.softFocus === 'object' && Object.keys(doc.softFocus).length > 0),
-        dateStamp: doc.dateStamp === true, monoUnlock: doc.monoUnlock === true,
+        dateStamp: doc.dateStamp === true, monoUnlock: doc.monoUnlock === true, video4k: doc.video4k === true,
         toursSeen: TOUR_IDS.filter((id) => Array.isArray(doc.tours) && doc.tours.includes(id)) });
       const fwRaw = await host.storeGet('firmware.bin');
       if (fwRaw) await openFirmware(fwRaw, doc.fwName || 'fwdc248b.bin', false);
@@ -541,8 +541,10 @@ export function setDateStamp(dateStamp: boolean): void { set({ dateStamp }); sch
 /** The six looks of the GR IV Monochrome on a colour GR IV. Nothing to unlock on the Monochrome. */
 export function setMonoUnlock(monoUnlock: boolean): void { set({ monoUnlock }); scheduleSave(); }
 export function monoUnlockOn(s: State = state): boolean { return !!s.monoUnlock && s.model !== 'MONO'; }
+/** 4K UHD video recording on 1080p 24p slot */
+export function setVideo4k(video4k: boolean): void { set({ video4k }); scheduleSave(); }
 /** Any addition that is not a slot or a ratio. */
-export function extrasOn(s: State = state): boolean { return softOn(s) || !!s.dateStamp || monoUnlockOn(s); }
+export function extrasOn(s: State = state): boolean { return softOn(s) || !!s.dateStamp || monoUnlockOn(s) || !!s.video4k; }
 const MINUS = '\u2212';
 const strengthLabel = (st: SoftFocusStrength | 'custom'): string => t(st === 'weak' ? 'softWeak' : st === 'medium' ? 'softMedium' : st === 'strong' ? 'softStrong' : 'softCustom');
 /** "−2 weak / −3 medium" (−1 first), for confirmations and the copies page. */
@@ -817,16 +819,18 @@ export async function outputFirmware(dest: Dest, stock = false): Promise<void> {
   const soft = !stock && softOn();
   const dateStamp = !stock && !!state.dateStamp;
   const monoUnlock = !stock && monoUnlockOn();
+  const video4k = !stock && !!state.video4k;
   if (!stock && (hasNameErrors() || hasRatioErrors())) return;
   if (!stock && hasExtraErrors()) { toast(t('extraIncomplete'), 'error'); return; }
   const extras = stock ? [] : extraSpecs();
-  if (!stock && changes.length === 0 && ratios.length === 0 && !soft && !dateStamp && !monoUnlock && extras.length === 0) { toast(t('nothingToDo'), 'info'); return; }
+  if (!stock && changes.length === 0 && ratios.length === 0 && !soft && !dateStamp && !monoUnlock && !video4k && extras.length === 0) { toast(t('nothingToDo'), 'info'); return; }
   if (dest.kind === 'card') {
     const lines = stock ? [t('copyOfficial')] : changes.map((c) => `${t(('slot' + c.id) as Key)}  ·  ${c.labels.join(' / ')}`);
     if (ratios.length) lines.push(t('ratioLine', { n: ratios.length, l: ratios.map((r) => r.name).join(' / ') }));
     if (soft) lines.push(t('softAdjLine'));
     if (dateStamp) lines.push(t('dateLine'));
     if (monoUnlock) lines.push(t('monoLine'));
+    if (video4k) lines.push(t('video4kLine'));
     if (extras.length) lines.push(t('extraLine', { n: extras.length, l: extras.map((x) => (x.halation ? `${x.name} (${t('halation')})` : x.name)).join(' / ') }));
     if (!(await ask(t('confirmTitle'), lines, t('confirmOk')))) return;
   }
@@ -837,7 +841,7 @@ export async function outputFirmware(dest: Dest, stock = false): Promise<void> {
     if (stock) file = state.raw;
     else {
       set({ busy: t('building') });
-      const built = await engine.build(changes.map((c) => c.request), ratios, [], { adjSoftFocus: soft, dateStamp, monoUnlock, ...(extras.length ? { extraSlots: extras } : {}) });
+      const built = await engine.build(changes.map((c) => c.request), ratios, [], { adjSoftFocus: soft, dateStamp, monoUnlock, video4k, ...(extras.length ? { extraSlots: extras } : {}) });
       if (!Object.values(built.checks).every((v) => v === true)) throw new EngineError('selfcheck-failed', 'self-check');
       file = built.file;
       void recordBuild(file, changes);
@@ -1071,6 +1075,7 @@ export function describeCopy(summary: FirmwareSummary, s: State = state): string
   if (summary.adjSoftFocus) lines.push(t('softAdjLine'));
   if (summary.dateStamp) lines.push(t('dateLine'));
   if (summary.monoUnlock) lines.push(t('monoLine'));
+  if (summary.video4k) lines.push(t('video4kLine'));
   if (summary.extraSlots?.length) lines.push(t('extraLine', { n: summary.extraSlots.length, l: summary.extraSlots.map((x) => x.name).join(' / ') }));
   if (summary.softFocus?.length) lines.push(t('softLine', { l: softText(summary.softFocus) }));
   return lines;

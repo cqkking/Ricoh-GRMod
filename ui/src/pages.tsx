@@ -15,6 +15,7 @@ import {
   setSoft,
   setDateStamp,
   setMonoUnlock,
+  setVideo4k,
   extraName, extraNameProblem, extraProblem, halationOf, removeExtraSlot, setExtraCount, setExtraName, setHalation, slotOf,
 } from './store';
 import type { ExtraSlot, RatioItem, WallItem } from './store';
@@ -345,6 +346,7 @@ function FeatureSwitches({ mono, boxRef, from }: { mono: boolean; boxRef?: (el: 
   const soft = useStore((s) => s.soft);
   const date = useStore((s) => s.dateStamp);
   const looks = useStore((s) => s.monoUnlock);
+  const video4k = useStore((s) => s.video4k);
   const own = useRef<HTMLDivElement | null>(null);
   // Moved to the other column: glide from where it was (FLIP). Rectangles are in window pixels,
   // the transform is in the zoomed interface's pixels.
@@ -363,6 +365,7 @@ function FeatureSwitches({ mono, boxRef, from }: { mono: boolean; boxRef?: (el: 
       <FeatureRow icon={Ico.soft} title={t('navSoft')} sub={t('softAdjSub')} on={soft} onChange={setSoft} />
       <FeatureRow icon={Ico.date} title={t('navDate')} sub={t('dateSub')} on={date} onChange={setDateStamp} />
       {!mono && <FeatureRow icon={Ico.mono} title={t('navMono')} sub={t('monoSub')} on={looks} onChange={setMonoUnlock} />}
+      <FeatureRow icon={Ico.video} title={t('navVideo4k')} sub={t('video4kSub')} on={video4k} onChange={setVideo4k} />
     </div>
   );
 }

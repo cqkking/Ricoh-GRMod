@@ -16,3 +16,6 @@ export { EXTRA_FIRST_STYLE, EXTRA_ICON_BYTES, EXTRA_ICON_ID, EXTRA_NAME_MAX, EXT
 export type { ExtraSlotSpec } from './slots';
 export { HALATION, HALATION_NAMES, halateRgba, halateYcc, halationIcon, halationLight, halationLut, halationScale, paramBytes, PLAIN_LIGHT, readHalationLight } from './halation';
 export type { HalationLight } from './halation';
+export { CASE_TARGET_4K_EXT, DEFAULT_4K_BITRATE, JUMP_TABLE_CASE3, OFFICIAL_CASE3_TARGET, SLOT7_RECORD_VA, installVideo4k, readVideo4kStatus } from './video4k';
+export type { Video4kOptions, Video4kSummary } from './video4k';
+

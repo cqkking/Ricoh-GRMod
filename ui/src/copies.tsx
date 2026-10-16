@@ -52,6 +52,7 @@ function FirmwareLine({ info, builds, lang, name }: { info: CopyInfo | undefined
           {s.softFocus?.length > 0 && <span className="chip tiny" title={softText(s.softFocus)}><b>{t('navSoft')}</b><span className="ellipsis">{softText(s.softFocus)}</span></span>}
           {s.dateStamp && <span className="chip tiny" title={t('dateLine')}><b>{t('navDate')}</b></span>}
           {s.monoUnlock && <span className="chip tiny" title={t('monoLine')}><b>{t('navMono')}</b></span>}
+          {s.video4k && <span className="chip tiny" title={t('video4kLine')}><b>{t('navVideo4k')}</b></span>}
         </div>
       </div>
     </>
