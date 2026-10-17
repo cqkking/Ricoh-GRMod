@@ -43,6 +43,14 @@ Clarity is a Laplacian pyramid on the developed picture (RetouchService, 0x538a1
 
 `core/src/fw/aspect/monounlock.ts` makes the six looks of the GR IV Monochrome selectable on the colour models, after [lemonadesaltbagel/GR4-MonoUnlock](https://github.com/lemonadesaltbagel/GR4-MonoUnlock) (no code copied): the check at 0x533cc6e0 becomes `cmp r1, #0x18` / `bhi`, and rows 3..8 of the look availability table at 0x53dbf36c (7 bytes per row, one column per camera model, column 1 = Monochrome) get every column except 1. The reference sets column 0 only (the standard GR IV); with every colour column the GR IV HDF has them too. 13 words in all.
 
+## 4K UHD Video Recording
+
+`core/src/fw/aspect/video4k.ts` unlocks 4K UHD (3840×2160, 30p, H.264 High@L5.1) video recording on the GR IV and GR IV HDF via in-place slot hijacking:
+- The RTOS sequence recipe switch jump table at 0x536497E8 handles movie mode cases 0..9. Case 3 (1080p 24p, jump target at 0x536497F4) originally points to `0x536498B0` (`CreateRecipeSequenceMovFhd24`); the mod redirects it in place to `0x536498C4` (`CreateRecipeSequenceMov4kExt`), triggering the native Socionext Milbeaut 4K ISP downscaler and sensor crop.
+- The RTOS movie record array at 0x5435F60C holds native 4K definitions in slots 0..8; Slot 7 (0x543602BC, stride 0x1D0) defines 3840×2160 30p at 100,000,000 bps (100 Mbps) with Codec ID 1. The target bitrate word (offset +0x84, 0x54360340) can be configured to 60 Mbps, 100 Mbps (default), or 120 Mbps.
+- Zero camera UI disruption: the camera's resolution menu still presents the three factory slots without moving or adding descriptors. Selecting `1920×1080 24p` in the camera records true 4K UHD 30p video.
+- Built files use Revision 3 (`GRMODAR3`), setting bit 4 (`FEATURE_VIDEO_4K = 16`) in the feature byte. Complete architectural reverse-engineering and thermal safety specifications are in `docs/FEAT_4K_VIDEO.md`.
+
 ## Second matrix
 
 Every imported preset (.cube / .xmp) is fitted as a colour matrix, three tone curves and a post-curve ("second") matrix (`core/src/color/fit.ts`): the plain fit first, then all three together on the same CIE76 objective. The camera applies the second matrix after the tone curves, together with the saturation setting; each slot gets its nine saturation matrices multiplied by it (Q9 rows of 512), so the saturation setting keeps working. On nine test presets the mean error drops on all of them (e.g. Provia 100F ΔE2000 1.32 → 0.43).
@@ -68,11 +76,11 @@ Publishing a release: build, then
 
 ## The UI
 
-The Image Control page has one card of switches under the two slots: soft focus (ADJ lever), date imprint (with its menu) and monochrome looks (not shown for the Monochrome model). They are saved with the project (`soft`, `dateStamp`, `monoUnlock` in `project.json`) and passed to `Engine.buildFirmware`; the firmware copies page reads them back from a file through `Engine.inspect`.
+The Image Control page has one card of switches under the two slots: 4K video recording (with bitrate selection: 60/100/120 Mbps), soft focus (ADJ lever), date imprint (with its menu) and monochrome looks (not shown for the Monochrome model). They are saved with the project (`video4k`, `video4kBitrate`, `soft`, `dateStamp`, `monoUnlock` in `project.json`) and passed to `Engine.buildFirmware`; the firmware copies page reads them back from a file through `Engine.inspect`.
 
 ## Combinations
 
-Anything that appends code or icons (ratios, ADJ soft focus, date imprint) gives the grown layout: RTOS grows, and ICONBIN too when icons are added (a build that only appends code, like the date imprint of a test build with a fixed setting, leaves ICONBIN as it is; `growPayload`, `grownRanges`, `Engine.inspect` and the self-check accept either). The monochrome looks (`core/src/fw/aspect/monounlock.ts`, 13 words) on their own are written in place, like Image Control edits: official layout plus the checksum compensation word; `Engine.inspect` recognises them when all 13 words are there. With any of the other additions they go into the grown build and its feature byte (bit 2). `core/test/combinations.test.ts` builds every combination, checks the self-check and what `inspect` reads back, that soft focus alone is unchanged, and that all additions with the contents of the earlier test firmware (`core/test/fw-helpers/test-firmware.ts`) give test firmware 017 byte for byte. `tools/testfw/build.ts` builds such test files.
+Anything that appends code or icons (ratios, ADJ soft focus, date imprint) gives the grown layout: RTOS grows, and ICONBIN too when icons are added (a build that only appends code, like the date imprint of a test build with a fixed setting, leaves ICONBIN as it is; `growPayload`, `grownRanges`, `Engine.inspect` and the self-check accept either). The monochrome looks (`core/src/fw/aspect/monounlock.ts`, 13 words) and 4K video recording (`core/src/fw/aspect/video4k.ts`) on their own modify RTOS entries; when combined with grown features they are recorded in the grown build's feature byte (bit 2 for monochrome, bit 4 for 4K video). `core/test/video4k.test.ts` tests standalone 4K builds, custom bitrates, and full coexistence with added ratios, soft focus, date imprint, and monochrome looks. `core/test/combinations.test.ts` builds every combination, checks the self-check and what `inspect` reads back, that soft focus alone is unchanged, and that all additions with the contents of the earlier test firmware (`core/test/fw-helpers/test-firmware.ts`) give test firmware 017 byte for byte. `tools/testfw/build.ts` builds such test files.
 
 ## Licence
 
